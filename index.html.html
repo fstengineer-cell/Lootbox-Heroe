@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lootbox Hero: Hybrid Scanner</title>
+    <style>
+        :root {
+            --bg: #05070a;
+            --card: #111827;
+            --neon: #10b981;
+            --gold: #f59e0b;
+            --info: #3b82f6;
+            --text: #f3f4f6;
+        }
+
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; }
+        .app { max-width: 500px; margin: auto; }
+        
+        h2 { text-align: center; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; margin: 10px 0 20px; }
+
+        /* ส่วนควบคุม */
+        .input-panel { background: var(--card); padding: 15px; border-radius: 16px; border: 1px solid #374151; margin-bottom: 20px; }
+        .input-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .step-label { width: 35px; color: #9ca3af; font-size: 0.8rem; font-weight: bold; }
+        select { flex: 1; padding: 12px; background: #1f2937; color: #fff; border: 1px solid #4b5563; border-radius: 8px; font-size: 1rem; }
+
+        .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        button { padding: 14px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; text-transform: uppercase; }
+        .btn-add { background: #374151; color: white; }
+        .btn-reset { background: #7f1d1d; color: white; }
+
+        /* การ์ดตัวเลือก (กรณีพบหลายอัน) */
+        .candidate-grid { display: grid; gap: 15px; margin-top: 20px; }
+        .p-card { background: var(--card); border: 1px solid #3b82f6; border-radius: 12px; padding: 15px; }
+        .p-header { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        
+        /* แผนที่เต็ม (กรณีล็อคเป้าได้แล้ว) */
+        .full-roadmap { background: var(--card); border: 2px solid var(--neon); border-radius: 16px; overflow: hidden; margin-top: 20px; display: none; }
+        .roadmap-header { background: var(--neon); color: black; padding: 12px; text-align: center; font-weight: bold; }
+        
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        td { padding: 12px 8px; border-bottom: 1px solid #1f2937; }
+        
+        tr.past { opacity: 0.3; background: #000; }
+        tr.current { background: rgba(16, 185, 129, 0.15); border-left: 4px solid var(--neon); }
+        
+        .reward-val { font-weight: bold; text-align: right; }
+        .high-profit { color: var(--neon); font-weight: 900; }
+        .jackpot { color: #f472b6; font-weight: 900; }
+        .next-tag { background: var(--info); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="app">
+    <h2>Hybrid Scanner V9</h2>
+
+    <div class="input-panel">
+        <div id="input-list"></div>
+        <div class="btn-group">
+            <button class="btn-add" onclick="addNewStep()">+ เพิ่มก้าวเดิน</button>
+            <button class="btn-reset" onclick="resetApp()">ล้างรอบใหม่</button>
+        </div>
+    </div>
+
+    <div id="candidateArea" class="candidate-grid"></div>
+
+    <div id="fullRoadmap" class="full-roadmap">
+        <div id="roadmapTitle" class="roadmap-header">LOCKED ROADMAP</div>
+        <table>
+            <tbody id="roadmapBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const patterns = [
+        ["ผจญภัยเล็ก", "กางเขนชะตากรรม", "ผจญภัยเล็ก", "ดวลบล็อค", "ผจญภัยเล็ก", "ผจญภัยเล็ก", "กางเขนชะตากรรม", "แดนลับแห่งการ์ด", "ผจญภัยเล็ก", "กางเขนชะตากรรม", "ผจญภัยเล็ก", "ดวลบล็อค", "วงล้อคลั่งไหล้"],
+        ["ผจญภัยเล็ก", "ผจญภัยเล็ก", "ขวานบินสะท้อน", "ผจญภัยเล็ก", "กางเขนชะตากรรม", "แดนลับแห่งการ์ด", "ผจญภัยเล็ก", "ผจญภัยเล็ก", "กางเขนชะตากรรม", "วงล้อคลั่งไหล้", "กางเขนชะตากรรม", "ผจญภัยเล็ก", "ดวลบล็อค"],
+        ["ผจญภัยเล็ก", "ผจญภัยเล็ก", "กางเขนชะตากรรม", "แดนลับแห่งการ์ด", "ผจญภัยเล็ก", "ผจญภัยเล็ก", "ขวานบินสะท้อน", "ผจญภัยเล็ก", "กางเขนชะตากรรม", "วงล้อคลั่งไหล้", "ผจญภัยเล็ก", "ดวลบล็อค", "กางเขนชะตากรรม"],
+        ["ผจญภัยเล็ก", "ผจญภัยเล็ก", "แดนลับแห่งการ์ด", "ผจญภัยเล็ก", "กางเขนชะตากรรม", "ผจญภัยเล็ก", "ขวานบินสะท้อน", "ผจญภัยเล็ก", "กางเขนชะตากรรม", "ผจญภัยเล็ก", "กางเขนชะตากรรม", "ขวานบินสะท้อน", "วงล้อคลั่งไหล้"]
+    ];
+
+    const rewards = {
+        "ผจญภัยเล็ก": "🪙 250", "กางเขนชะตากรรม": "🪙 300",
+        "ดวลบล็อค": "🔥 550", "ขวานบินสะท้อน": "⚡ 700",
+        "แดนลับแห่งการ์ด": "✨ DARK GOLD", "วงล้อคลั่งไหล้": "🎡 JACKPOT"
+    };
+
+    window.onload = () => {
+        const saved = localStorage.getItem('v9_log');
+        if(saved) {
+            JSON.parse(saved).forEach(val => addNewStep().value = val);
+            updateUI();
+        } else { addNewStep(); }
+    };
+
+    function addNewStep() {
+        const container = document.getElementById('input-list');
+        const i = container.children.length + 1;
+        const div = document.createElement('div');
+        div.className = 'input-row';
+        div.innerHTML = `<span class="step-label">#${i}</span><select onchange="updateUI()"><option value="">-- เลือก --</option>${Object.keys(rewards).map(e => `<option value="${e}">${e}</option>`).join('')}</select>`;
+        container.appendChild(div);
+        return div.querySelector('select');
+    }
+
+    function updateUI() {
+        const inputs = Array.from(document.querySelectorAll('select')).map(s => s.value).filter(v => v !== "");
+        localStorage.setItem('v9_log', JSON.stringify(inputs));
+        
+        let matches = [];
+        patterns.forEach((p, pIdx) => {
+            for (let i = 0; i <= p.length - inputs.length; i++) {
+                if (JSON.stringify(p.slice(i, i + inputs.length)) === JSON.stringify(inputs)) {
+                    matches.push({ pNum: pIdx + 1, startIdx: i, data: p });
+                }
+            }
+        });
+
+        const candArea = document.getElementById('candidateArea');
+        const roadmapEl = document.getElementById('fullRoadmap');
+        
+        candArea.innerHTML = "";
+        roadmapEl.style.display = "none";
+
+        if (matches.length > 1) {
+            // แสดงความเป็นไปได้ทั้งหมด
+            matches.forEach(m => createCandidateCard(m, inputs.length));
+        } else if (matches.length === 1) {
+            // ล็อคเป้าหมายเดียว กางแผนที่เต็ม
+            renderFullRoadmap(matches[0], inputs.length);
+            roadmapEl.style.display = "block";
+        }
+    }
+
+    function createCandidateCard(match, currentLen) {
+        const area = document.getElementById('candidateArea');
+        const card = document.createElement('div');
+        card.className = 'p-card';
+        const nextIdx = match.startIdx + currentLen;
+        
+        let nextRows = "";
+        for (let j = nextIdx; j < Math.min(nextIdx + 3, match.data.length); j++) {
+            const ev = match.data[j];
+            const isHigh = ev.includes("ดวล") || ev.includes("ขวาน") || ev.includes("วงล้อ") || ev.includes("แดนลับ");
+            nextRows += `<tr><td>${j === nextIdx ? '<span class="next-tag">NEXT</span>' : '#'+(j+1)} ${ev}</td><td class="reward-val ${isHigh ? 'high-profit' : ''}">${rewards[ev]}</td></tr>`;
+        }
+
+        card.innerHTML = `
+            <div class="p-header"><span style="color:var(--gold); font-weight:bold;">รูปแบบที่ ${match.pNum}</span><span style="font-size:0.7rem; color:#888;">เริ่มที่ #${match.startIdx+1}</span></div>
+            <table>${nextRows}</table>
+        `;
+        area.appendChild(card);
+    }
+
+    function renderFullRoadmap(match, currentLen) {
+        document.getElementById('roadmapTitle').innerText = `Roadmap: รูปแบบที่ ${match.pNum} (LOCKED)`;
+        const body = document.getElementById('roadmapBody');
+        body.innerHTML = "";
+        const currentPos = match.startIdx + currentLen - 1;
+
+        match.data.forEach((ev, i) => {
+            const tr = document.createElement('tr');
+            if (i < currentPos) tr.className = "past";
+            else if (i === currentPos) tr.className = "current";
+
+            const reward = rewards[ev];
+            const isHigh = reward.includes("550") || reward.includes("700") || reward.includes("GOLD") || reward.includes("JACKPOT");
+
+            tr.innerHTML = `
+                <td style="width:30px; color:#666;">${i+1}</td>
+                <td style="${i === currentPos + 1 ? 'color:var(--info); font-weight:bold;' : ''}">
+                    ${i === currentPos + 1 ? '🔜 ' : ''}${ev}
+                </td>
+                <td class="reward-val ${reward.includes('JACKPOT') ? 'jackpot' : (isHigh ? 'high-profit' : '')}">${reward}</td>
+            `;
+            body.appendChild(tr);
+        });
+    }
+
+    function resetApp() {
+        if(confirm("ต้องการเริ่มรอบใหม่และล้างข้อมูลทั้งหมด?")) {
+            localStorage.removeItem('v9_log');
+            location.reload();
+        }
+    }
+</script>
+
+</body>
+</html>
